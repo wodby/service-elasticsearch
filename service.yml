@@ -30,6 +30,9 @@ tokens:
 - name: password
   generate:
     regex: '[A-Za-z0-9!@#%_-]{32}'
+- name: kibana_password
+  generate:
+    regex: '[A-Za-z0-9!@#%_-]{32}'
 
 env:
 - name: discovery.type
@@ -45,6 +48,8 @@ env:
 - name: ELASTIC_PASSWORD
   value: '{{password}}'
   secret: true
+- name: KIBANA_SYSTEM_PASSWORD
+  value: '{{kibana_password}}'
 - name: ES_JAVA_OPTS
   value: -Xms1g -Xmx1g
 
@@ -95,6 +100,28 @@ helm:
     value:
       fsGroup: 0
       fsGroupChangePolicy: OnRootMismatch
+  - name: lifecycle
+    value:
+      postStart:
+        exec:
+          command:
+          - /bin/bash
+          - -ec
+          - |
+            for ((attempt=1; attempt<=120; attempt++)); do
+              if curl --silent --show-error --fail \
+                --user "elastic:${ELASTIC_PASSWORD}" \
+                --header "Content-Type: application/json" \
+                --request POST \
+                --data "{\"password\":\"${KIBANA_SYSTEM_PASSWORD}\"}" \
+                http://127.0.0.1:9200/_security/user/kibana_system/_password \
+                >/dev/null; then
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "Timed out setting the kibana_system password" >&2
+            exit 1
   - name: startupProbe
     value:
       tcpSocket:
