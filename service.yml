@@ -1,0 +1,133 @@
+name: elasticsearch
+title: Elasticsearch
+icon: elasticsearch
+type: search
+scalable: false
+
+labels:
+- elasticsearch
+- search
+
+options:
+- version: '9.5'
+  tag: '9.5.3'
+  default: true
+
+endpoints:
+- name: elasticsearch
+  ports:
+  - name: http
+    number: 9200
+    protocol: http
+    main: true
+    private: true
+  - name: transport
+    number: 9300
+    protocol: tcp
+    private: true
+
+tokens:
+- name: password
+  generate:
+    regex: '[A-Za-z0-9!@#%_-]{32}'
+
+env:
+- name: discovery.type
+  value: single-node
+- name: cluster.name
+  value: '{{app.name}}-{{instance.name}}'
+- name: node.store.allow_mmap
+  value: 'false'
+- name: xpack.security.enabled
+  value: 'true'
+- name: xpack.security.http.ssl.enabled
+  value: 'false'
+- name: ELASTIC_PASSWORD
+  value: '{{password}}'
+  secret: true
+- name: ES_JAVA_OPTS
+  value: -Xms1g -Xmx1g
+
+volumes:
+- name: data
+  title: Elasticsearch data
+  size: 20
+  helm:
+    labels: persistence.labels
+    values:
+    - name: persistence.enabled
+      value: true
+    - name: persistence.existingClaim
+      value: '{{volumes.data.claim}}'
+    - name: persistence.size
+      value: '{{volumes.data.size}}Gi'
+
+helm:
+  name: wodby
+  source: oci://registry-1.docker.io/wodby/stateful
+  chart: oci://registry-1.docker.io/wodby/stateful
+  version: 0.2.0
+  valueMappings:
+    replicas: replicaCount
+    nameOverride: nameOverride
+    fullnameOverride: fullnameOverride
+    serviceAccountName: serviceAccount.name
+    serviceAccountCreate: serviceAccount.create
+    strategy: updateStrategy.type
+    minReady: minReadySeconds
+    shutdownGracePeriod: terminationGracePeriodSeconds
+  values:
+  - name: containerName
+    value: elasticsearch
+  - name: containerPorts
+    value:
+    - name: http
+      containerPort: 9200
+      protocol: TCP
+    - name: transport
+      containerPort: 9300
+      protocol: TCP
+  - name: headlessService.enabled
+    value: false
+  - name: persistence.mountPath
+    value: /usr/share/elasticsearch/data
+  - name: podSecurityContext
+    value:
+      fsGroup: 0
+      fsGroupChangePolicy: OnRootMismatch
+  - name: startupProbe
+    value:
+      tcpSocket:
+        port: http
+      failureThreshold: 30
+      periodSeconds: 10
+  - name: readinessProbe
+    value:
+      tcpSocket:
+        port: http
+      periodSeconds: 10
+  - name: livenessProbe
+    value:
+      tcpSocket:
+        port: http
+      initialDelaySeconds: 60
+      periodSeconds: 20
+
+workloads:
+- name: main
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: '{{helm.release}}'
+  kind: statefulset
+  primary: true
+  helm:
+    labels: podLabels
+    annotations: podAnnotations
+    volumes: extraVolumes
+  containers:
+  - name: elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch
+    helm:
+      resources: resources
+      env: envVars
+      mounts: extraVolumeMounts
