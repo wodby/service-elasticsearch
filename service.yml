@@ -51,6 +51,7 @@ env:
   secret: true
 - name: KIBANA_SYSTEM_PASSWORD
   value: '{{kibana_password}}'
+  secret: true
 - name: ES_JAVA_OPTS
   value: -Xms1g -Xmx1g
 
