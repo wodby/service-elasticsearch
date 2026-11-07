@@ -156,6 +156,12 @@ workloads:
   containers:
   - name: elasticsearch
     image: docker.elastic.co/elasticsearch/elasticsearch
+    resources:
+      request:
+        cpu: 300
+        memory: 1424
+      limit:
+        memory: 3072
     helm:
       resources: resources
       env: envVars
